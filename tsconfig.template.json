@@ -6,8 +6,8 @@
         "paths": {
             "shapez.io/*": ["[shapez.io]/src/js/*"]
         },
-        "strict": true
+        "strict": true,
+        "outDir": "./build/"
     },
-    "include": ["src/**/*", "[shapez.io]/src/js/globals.d.ts"],
-    "exclude": ["./node_modules", "./build"]
+    "include": ["./src/**/*", "[shapez.io]/src/js/globals.d.ts"],
 }

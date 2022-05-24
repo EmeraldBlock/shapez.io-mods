@@ -12,7 +12,7 @@ const numberToButton = [enumMouseButton.left, enumMouseButton.middle, enumMouseB
 
 class UpmouseMod extends Mod {
     init() {
-        const upmouse = /** @type {TypedSignal<[Vector, enumMouseButton]>} */ (new Signal());
+        const upmouse: TypedSignal<[Vector, enumMouseButton]> = new Signal();
         this.signals.gameInitialized.add(root => {
             let dragged = false;
             root.canvas.addEventListener("mousedown", () => {
