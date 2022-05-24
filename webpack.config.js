@@ -18,7 +18,8 @@ const banners = Object.fromEntries(await Promise.all(mods.map(async (name) => {
 source at https://github.com/EmeraldBlock/shapez.io-mods`];
 })));
 
-export default {
+/** @type {webpack.Configuration} */
+export default ({
     entry,
     output: {
         path: path.resolve(process.cwd(), "./build/"),
@@ -28,10 +29,23 @@ export default {
         },
     },
     mode: "production",
+    module: {
+        rules: [
+            {
+                test: /.js$/,
+                loader: "string-replace-loader",
+                /** @type {import("string-replace-loader").Options} */
+                options: {
+                    search: /import\s*\{([^}]*)\}\s*from\s*["']shapez.io\/[^"']*["']\s*;/gu,
+                    replace: (_, imports) => `const {${imports.replaceAll(/([^{,\s]\s*)\sas(\s+[^\s,}])/gu, "$1:$2")}} = window.shapez;`,
+                },
+            }
+        ],
+    },
     optimization: {
         minimizer: [new TerserPlugin({ extractComments: false })],
     },
     plugins: [
         new webpack.BannerPlugin((data) => banners[data.chunk.name]),
     ]
-};
+});
