@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "target": "ES2021",
+        "module": "ES2020",
+        "checkJs": true,
+        "paths": {
+            "shapez.io/*": ["[shapez.io]/src/js/*"]
+        },
+        "strict": true
+    },
+    "include": ["src/**/*", "[shapez.io]/src/js/globals.d.ts"],
+    "exclude": ["./node_modules", "./build"]
+}

@@ -1,36 +1,22 @@
-// @ts-check
-
-/**
- * @template {Array<any>} T
- * @typedef {{
- *     add(receiver: (...args: T) => string | void, scope?: object),
- *     addToTop(receiver: (...args: T) => string | void, scope?: object),
- *     remove(receiver: (...args: T) => string | void),
- *     dispatch(...args: T): string | void,
- *     removeAll(),
- * }} TypedSignal
- **/
-
 /**
  * @type {{
- *     Mod: typeof import("../src/js/mods/mod").Mod,
- *     Signal: typeof import("../src/js/core/signal").Signal,
- *     Vector: typeof import("../src/js/core/vector").Vector,
- *     enumMouseButton: typeof import("../src/js/game/camera").enumMouseButton,
- *     HUDConstantSignalEdit: typeof import("../src/js/game/hud/parts/constant_signal_edit").HUDConstantSignalEdit,
- *     HUDLeverToggle: typeof import("../src/js/game/hud/parts/lever_toggle").HUDLeverToggle,
- *     HUDWaypoints: typeof import("../src/js/game/hud/parts/waypoints").HUDWaypoints,
+ *     Mod: typeof import("shapez.io/mods/mod").Mod,
+ *     Signal: typeof import("shapez.io/core/signal").Signal,
+ *     Vector: typeof import("shapez.io/core/vector").Vector,
+ *     enumMouseButton: typeof import("shapez.io/game/camera").enumMouseButton,
+ *     HUDConstantSignalEdit: typeof import("shapez.io/game/hud/parts/constant_signal_edit").HUDConstantSignalEdit,
+ *     HUDLeverToggle: typeof import("shapez.io/game/hud/parts/lever_toggle").HUDLeverToggle,
+ *     HUDWaypoints: typeof import("shapez.io/game/hud/parts/waypoints").HUDWaypoints,
  * }}
  */
 const {
-    Mod: M,
+    Mod,
     Signal,
     Vector,
     enumMouseButton,
     HUDConstantSignalEdit,
     HUDLeverToggle,
     HUDWaypoints,
-    // @ts-ignore
 } = window.shapez;
 
 const METADATA = {
@@ -66,9 +52,9 @@ const METADATA = {
 
 const numberToButton = [enumMouseButton.left, enumMouseButton.middle, enumMouseButton.right];
 
-class Mod extends M {
+class UpmouseMod extends Mod {
     init() {
-        const upmouse = /** @type {TypedSignal<[import("../src/js/core/vector").Vector, import("../src/js/game/camera").enumMouseButton]>} */ (new Signal());
+        const upmouse = /** @type {TypedSignal<[import("shapez.io/core/vector").Vector, import("shapez.io/game/camera").enumMouseButton]>} */ (new Signal());
         this.signals.gameInitialized.add(root => {
             let dragged = false;
             root.canvas.addEventListener("mousedown", () => {
@@ -96,3 +82,5 @@ class Mod extends M {
         });
     }
 }
+
+window.$shapez_registerMod(UpmouseMod, METADATA);
