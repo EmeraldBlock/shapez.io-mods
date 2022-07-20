@@ -2,7 +2,7 @@ export default {
     website: "https://emeraldblock.github.io/",
     author: "Emerald Block",
     name: "Drag, don't edit!",
-    version: "0.1.0",
+    version: "1.0.0",
     id: "upmouse",
     description: "Dragging the map is prioritized over triggering stuff",
     minimumGameVersion: ">=1.5.0",
@@ -16,7 +16,7 @@ export default {
             },
         ],
         changelog: {
-            "0.1.0": [
+            "1.0.0": [
                 "Initial release",
                 "Support for editing signals, toggling buttons, and interacting with markers",
             ],

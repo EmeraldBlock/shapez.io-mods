@@ -27,14 +27,15 @@ class UpmouseMod extends Mod {
                 }
             });
         });
-        this.modInterface.replaceMethod(HUDConstantSignalEdit, "initialize", function () {
+        this.modInterface.runAfterMethod(HUDConstantSignalEdit, "initialize", function () {
+            this.root.camera.downPreHandler.remove(this.downPreHandler);
             upmouse.add(this.downPreHandler, this);
         });
-        this.modInterface.replaceMethod(HUDLeverToggle, "initialize", function () {
+        this.modInterface.runAfterMethod(HUDLeverToggle, "initialize", function () {
+            this.root.camera.downPreHandler.remove(this.downPreHandler);
             upmouse.add(this.downPreHandler, this);
         });
-        this.modInterface.replaceMethod(HUDWaypoints, "initialize", function ($old) {
-            $old();
+        this.modInterface.runAfterMethod(HUDWaypoints, "initialize", function () {
             this.root.camera.downPreHandler.remove(this.onMouseDown);
             upmouse.add(this.onMouseDown, this);
         });
