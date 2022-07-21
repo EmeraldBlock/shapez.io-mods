@@ -11,10 +11,12 @@ import { KEYMAPPINGS } from "shapez.io/game/key_action_mapper.js";
 import type { HUDMassSelector } from "shapez.io/game/hud/parts/mass_selector.js";
 import type { GameHUD } from "shapez.io/game/hud/hud.js";
 
-const UPMOUSE = Symbol("upmouse");
+const upmouseHandler = Symbol("upmouseHandler");
+const onUpmouse = Symbol("onUpmouse");
 declare module "shapez.io/game/camera" {
     interface Camera {
-        [UPMOUSE]: TypedSignal<[Vector, enumMouseButton]>;
+        [upmouseHandler]: TypedSignal<[Vector, enumMouseButton]>;
+        [onUpmouse]: (this: Camera, event: MouseEvent) => void;
     }
 }
 
@@ -25,43 +27,45 @@ class UpmouseMod extends Mod {
     constructor(...args: ConstructorParameters<typeof Mod>) {
         super(...args);
         this.symbols = {
-            upmouse: UPMOUSE,
+            upmouseHandler,
+            onUpmouse,
         };
     }
 
     init() {
-        this.modInterface.runBeforeMethod(Camera, "internalInitEvents", function () {
-            this[UPMOUSE] = new Signal();
-        });
-
-        let focused = false;
-        this.modInterface.runBeforeMethod(Camera, "onMouseUp", function (): false {
+        Camera.prototype[onUpmouse] = function (event) {
             const { blueprintPlacer, buildingPlacer, massSelector } = <GameHUD["parts"] & { massSelector: HUDMassSelector }>this.root.hud.parts!;
-            focused = !this.isCurrentlyInteracting()
+            if (
+                !this.isCurrentlyInteracting()
                 && blueprintPlacer.currentBlueprint!.get() === null
                 && buildingPlacer.currentMetaBuilding!.get() === null
-                && !(massSelector !== undefined && this.root.keyMapper.getBinding(KEYMAPPINGS.massSelect.massSelectStart).pressed);
-            return false;
-        });
-        this.modInterface.runAfterMethod(Camera, "onMouseUp", function (eventu): false {
-            const event = eventu!;
-            if (focused) {
-                this.root.camera[UPMOUSE].dispatch(new Vector(event.clientX, event.clientY), numberToButton[event.button]);
+                && !(massSelector !== undefined && this.root.keyMapper.getBinding(KEYMAPPINGS.massSelect.massSelectStart).pressed)
+            ) {
+                this.root.camera[upmouseHandler].dispatch(new Vector(event.clientX, event.clientY), numberToButton[event.button]);
             }
-            return false;
+        };
+        let eventListenerUpmouse: ((event: MouseEvent) => void) | undefined;
+        this.modInterface.runBeforeMethod(Camera, "internalInitEvents", function () {
+            this[upmouseHandler] = new Signal();
+            eventListenerUpmouse = this[onUpmouse].bind(this);
+            this.root.canvas.addEventListener("mouseup", eventListenerUpmouse);
+        });
+        this.modInterface.runBeforeMethod(Camera, "cleanup", function () {
+            this.root.canvas.removeEventListener("mouseup", eventListenerUpmouse!);
+            eventListenerUpmouse = undefined;
         });
 
         this.modInterface.runAfterMethod(HUDConstantSignalEdit, "initialize", function () {
             this.root.camera.downPreHandler.remove(this.downPreHandler);
-            this.root.camera[UPMOUSE].add(this.downPreHandler, this);
+            this.root.camera[upmouseHandler].add(this.downPreHandler, this);
         });
         this.modInterface.runAfterMethod(HUDLeverToggle, "initialize", function () {
             this.root.camera.downPreHandler.remove(this.downPreHandler);
-            this.root.camera[UPMOUSE].add(this.downPreHandler, this);
+            this.root.camera[upmouseHandler].add(this.downPreHandler, this);
         });
         this.modInterface.runAfterMethod(HUDWaypoints, "initialize", function () {
             this.root.camera.downPreHandler.remove(this.onMouseDown);
-            this.root.camera[UPMOUSE].add(this.onMouseDown, this);
+            this.root.camera[upmouseHandler].add(this.onMouseDown, this);
         });
     }
 }
