@@ -6,6 +6,8 @@ import fs from "fs/promises";
 import webpack from "webpack";
 import TerserPlugin from "terser-webpack-plugin";
 
+import config from "./config.js";
+
 const SRC = "./src/";
 const BUILD = "./build/";
 
@@ -48,18 +50,41 @@ export default ({
         },
     },
     mode: "production",
+    resolve: {
+        extensions: [".ts", "..."],
+        alias: {
+            "shapez.io": path.resolve(config.shapezDir, "src/css"),
+        },
+    },
     module: {
         rules: [
             {
                 test: /.ts$/,
                 use: [
                     fakeImports,
-                    "ts-loader",
+                    {
+                        loader: "ts-loader",
+                        options: {
+                            transpileOnly: true,
+                        },
+                    },
                 ],
             },
             {
                 test: /.js$/,
                 use: fakeImports,
+            },
+            {
+                test: /.scss$/,
+                use: {
+                    loader: "sass-loader",
+                    options: {
+                        sassOptions: {
+                            quietDeps: true,
+                        },
+                    },
+                },
+                type: "asset/source",
             },
         ],
     },
