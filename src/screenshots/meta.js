@@ -3,7 +3,7 @@ export default {
     author: "Emerald Block",
     name: "Superb Screenshots",
     version: "0.1.0",
-    id: "screenshot",
+    id: "screenshots",
     description: "Fixes and improves screenshots, plus new features",
     minimumGameVersion: ">=1.5.0",
     doesNotAffectSavegame: true,
