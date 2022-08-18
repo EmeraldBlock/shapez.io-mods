@@ -2,7 +2,7 @@ export default {
     website: "https://emeraldblock.github.io/",
     author: "Emerald Block",
     name: "Drag, don't edit!",
-    version: "1.0.2",
+    version: "0.3.0",
     id: "upmouse",
     description: "Dragging the map is prioritized over triggering stuff",
     minimumGameVersion: ">=1.5.0",
@@ -16,14 +16,14 @@ export default {
             },
         ],
         changelog: {
-            "1.0.2": [
+            "0.3.0": [
                 "Fixed signal dialog opening twice",
             ],
-            "1.0.1": [
+            "0.2.0": [
                 "Fixed mod not cleaning up when exiting save",
                 "Fixed triggering when placing, etc.",
             ],
-            "1.0.0": [
+            "0.1.0": [
                 "Initial release",
                 "Support for editing signals, toggling buttons, and interacting with markers",
             ],
