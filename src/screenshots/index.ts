@@ -1,4 +1,8 @@
-import METADATA from "./meta.js";
+import metadata from "./meta.js";
+import icon from "./icon.webp";
+const METADATA: Meta = metadata;
+METADATA.extra.icon = icon;
+
 import css from "./dialogs.scss";
 
 import { Mod } from "shapez.io/mods/mod.js";
