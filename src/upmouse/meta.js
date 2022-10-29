@@ -2,7 +2,7 @@ export default {
     website: "https://emeraldblock.github.io/",
     author: "Emerald Block",
     name: "Drag, don't edit!",
-    version: "0.3.0",
+    version: "0.3.1",
     id: "upmouse",
     description: "Dragging the map is prioritized over triggering stuff",
     minimumGameVersion: ">=1.5.0",
@@ -16,6 +16,9 @@ export default {
             },
         ],
         changelog: {
+            "0.3.1": [
+                "Added icon",
+            ],
             "0.3.0": [
                 "Fixed signal dialog opening twice",
             ],

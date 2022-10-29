@@ -1,4 +1,7 @@
-import METADATA from "./meta.js";
+import metadata from "./meta.js";
+import icon from "./icon.webp";
+const METADATA: Meta = metadata;
+METADATA.extra.icon = icon;
 
 import { Mod } from "shapez.io/mods/mod";
 import { Signal } from "shapez.io/core/signal";
