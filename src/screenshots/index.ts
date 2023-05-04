@@ -8,7 +8,8 @@ import css from "./dialogs.scss";
 import { Mod } from "shapez.io/mods/mod.js";
 import { initMapChunkView } from "./map_chunk_view";
 import { initItemAcceptorSystem } from "./item_acceptor";
-import { initHUDScreenshotExporter } from "./screenshot_exporter";
+import { ScreenshotOptions, initHUDScreenshotExporter, takeScreenshot } from "./screenshot_exporter";
+import type { GameRoot } from "shapez.io/game/root";
 
 class ScreenshotMod extends Mod {
     init() {
@@ -17,6 +18,10 @@ class ScreenshotMod extends Mod {
         initMapChunkView(this);
         initItemAcceptorSystem(this);
         initHUDScreenshotExporter(this);
+    }
+
+    takeScreenshot(root: GameRoot, options: ScreenshotOptions) {
+        return takeScreenshot(root, options);
     }
 }
 

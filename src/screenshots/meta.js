@@ -2,7 +2,7 @@ export default {
     website: "https://emeraldblock.github.io/",
     author: "Emerald Block",
     name: "Superb Screenshots",
-    version: "0.1.1",
+    version: "0.1.2",
     id: "screenshots",
     description: "Fixes and improves screenshots, plus new features",
     minimumGameVersion: ">=1.5.0",
@@ -16,6 +16,9 @@ export default {
             },
         ],
         changelog: {
+            "0.1.2": [
+                "Added screenshot API",
+            ],
             "0.1.1": [
                 "Added icon",
                 "Edited readme",
@@ -28,7 +31,7 @@ export default {
             ],
         },
         source: "https://github.com/EmeraldBlock/shapez.io-mods",
-        readme: `<p>Screenshots are buggy and broken! This mod fixes them (and makes them better).</p>
+        readme: `<p>F3 screenshots are buggy and broken! This mod fixes them (and makes them better).</p>
 <p>No more disappearing buildings. No more glitched items. And no more off-centered pixel distribution!</p>
 <p>Take screenshots of select regions of your base the same way you select blueprints. Say goodbye to image stitching!</p>
 <p>Plus, now you can make map view screenshots! Or take one with a transparent background! You can even choose image quality! All with a fancy new screenshot dialog.</p>

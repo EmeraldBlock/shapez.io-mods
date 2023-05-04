@@ -19,13 +19,14 @@ import { T } from "shapez.io/translations.js";
 import type { GameHUD } from "shapez.io/game/hud/hud.js";
 import type { HUDWiresOverlay } from "shapez.io/game/hud/parts/wires_overlay";
 import type { Mod } from "shapez.io/mods/mod.js";
+import type { GameRoot } from "shapez.io/game/root";
 
 declare module "shapez.io/game/hud/parts/screenshot_exporter.js" {
     interface HUDScreenshotExporter {
         startExport(): void;
 
         /**
-         * Renders a screenshot of the entire base as closely as possible to the ingame camera
+         * Renders a screenshot of the entire base or a region as closely as possible to the ingame camera, then exports it
          */
         doExport(targetResolution: number, overlay: boolean, wiresLayer: boolean, hideBackground: boolean, allowBorder: boolean, tileBounds?: Rectangle): void;
     }
@@ -64,8 +65,179 @@ const screenshotQualities : Array<Quality> = [
 // @TODO: translation (T.dialogs.exportScreenshotWarning.qualities)
 const qualityNames = { high: "High", medium: "Medium", low: "Low", pixels: "Pixels" };
 
+export type ScreenshotOptions = {
+    targetResolution: number;
+    overlay: boolean;
+    wiresLayer: boolean;
+    hideBackground: boolean;
+    allowBorder: boolean;
+    tileBounds?: Rectangle;
+};
+
+/**
+ * Renders a screenshot of the entire base or a region as closely as possible to the ingame camera
+ */
+export function takeScreenshot(root: GameRoot, {
+    targetResolution,
+    overlay,
+    wiresLayer,
+    hideBackground,
+    allowBorder,
+    tileBounds,
+}: ScreenshotOptions) {
+    logger.log("Starting render ...");
+
+    if (!tileBounds) {
+        // Find extends
+        const staticEntities = root.entityMgr.getAllWithComponent(StaticMapEntityComponent);
+
+        const minTile = new Vector(0, 0);
+        const maxTile = new Vector(0, 0);
+        for (let i = 0; i < staticEntities.length; ++i) {
+            const entityBounds = staticEntities[i].components.StaticMapEntity.getTileSpaceBounds();
+            minTile.x = Math.min(minTile.x, entityBounds.x);
+            minTile.y = Math.min(minTile.y, entityBounds.y);
+
+            maxTile.x = Math.max(maxTile.x, entityBounds.x + entityBounds.w);
+            maxTile.y = Math.max(maxTile.y, entityBounds.y + entityBounds.h);
+        }
+
+        minTile.x = Math.floor(minTile.x / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
+        minTile.y = Math.floor(minTile.y / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
+
+        maxTile.x = Math.ceil(maxTile.x / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
+        maxTile.y = Math.ceil(maxTile.y / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
+
+        tileBounds = Rectangle.fromTwoPoints(minTile, maxTile).expandedInAllDirections(
+            globalConfig.mapChunkSize
+        );
+    }
+
+    // if the desired pixels per tile is too small, we do not create a border
+    // so that we have more valid values for pixels per tile
+    // we do not create a border for map view since there is no sprite overflow
+    const border =
+        allowBorder &&
+        !overlay &&
+        targetResolution / (Math.max(tileBounds.w, tileBounds.h) + 2 / TARGET_INVERSE_BORDER) >=
+            3 * TARGET_INVERSE_BORDER;
+
+    const bounds = border ? tileBounds.expandedInAllDirections(1 / TARGET_INVERSE_BORDER) : tileBounds;
+    logger.log("Bounds:", bounds);
+
+    const maxDimensions = Math.max(bounds.w, bounds.h);
+
+    // at least 3 pixels per tile, for bearable quality
+    // at most the resolution of the assets, to not be excessive
+    const clamped = clamp(
+        targetResolution / (maxDimensions + (border ? 2 / 3 : 0)),
+        3,
+        globalConfig.assetsDpi * globalConfig.tileSize
+    );
+
+    // 1 is a fake value since it behaves the same as a border width of 0
+    const inverseBorder = border ? TARGET_INVERSE_BORDER : 1;
+    const tileSizePixels = overlay
+        ? // we floor to the nearest multiple of the map view tile resolution
+          Math.floor(clamped / CHUNK_OVERLAY_RES) * CHUNK_OVERLAY_RES || CHUNK_OVERLAY_RES
+        : // we floor to the nearest odd multiple so that the center of each building is rendered
+          Math.floor((clamped + inverseBorder) / (2 * inverseBorder)) * (2 * inverseBorder) -
+              inverseBorder || inverseBorder;
+    logger.log("Pixels per tile:", tileSizePixels);
+
+    if (Math.round(tileSizePixels * maxDimensions) > MAX_CANVAS_DIMS) {
+        logger.error("Maximum canvas size exceeded, aborting");
+        return;
+    }
+
+    const zoomLevel = tileSizePixels / globalConfig.tileSize;
+    logger.log("Scale:", zoomLevel);
+
+    // Compute atlas scale
+    const lowQuality = root.app.settings!.getAllSettings().lowQualityTextures;
+    const effectiveZoomLevel = (zoomLevel / globalConfig.assetsDpi) * globalConfig.assetsSharpness;
+
+    let desiredAtlasScale = "0.25";
+    if (effectiveZoomLevel > 0.5 && !lowQuality) {
+        desiredAtlasScale = ORIGINAL_SPRITE_SCALE;
+    } else if (effectiveZoomLevel > 0.35 && !lowQuality) {
+        desiredAtlasScale = "0.5";
+    }
+
+    logger.log("Allocating buffer, if the factory grew too big it will crash here");
+    const [canvas, context] = makeOffscreenBuffer(
+        Math.round(bounds.w * tileSizePixels),
+        Math.round(bounds.h * tileSizePixels),
+        {
+            smooth: true,
+            reusable: false,
+            label: "export-buffer",
+        }
+    );
+    logger.log("Got buffer, rendering now ...");
+
+    const visibleRect = bounds.allScaled(globalConfig.tileSize);
+    const parameters = new DrawParameters({
+        context,
+        visibleRect,
+        desiredAtlasScale,
+        root: root,
+        zoomLevel: zoomLevel,
+    });
+
+    context.scale(zoomLevel, zoomLevel);
+    context.translate(-visibleRect.x, -visibleRect.y);
+
+    // hack but works
+    const currentLayer = root.currentLayer;
+    const currentAlpha = (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay.currentAlpha;
+    if (wiresLayer) {
+        root.currentLayer = "wires";
+        (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay.currentAlpha = 1;
+    } else {
+        root.currentLayer = "regular";
+        (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay.currentAlpha = 0;
+    }
+    root.systemMgr.systems.itemAcceptor.updateForScreenshot();
+
+    // Render all relevant chunks
+    root.signals.gameFrameStarted.dispatch();
+    if (overlay) {
+        root;
+        if (hideBackground) {
+            root.map.drawVisibleChunks(parameters, MapChunkView.prototype.drawOverlayNoBackground);
+        } else {
+            root.map.drawOverlay(parameters);
+        }
+    } else {
+        if (hideBackground) {
+            root.map.drawVisibleChunks(
+                parameters,
+                MapChunkView.prototype.drawBackgroundLayerBeltsOnly
+            );
+        } else {
+            root.map.drawBackground(parameters);
+        }
+        root.systemMgr.systems.belt.drawBeltItems(parameters);
+        root.map.drawForeground(parameters);
+        root.systemMgr.systems.hub.draw(parameters);
+        if ((<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay) {
+            (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay.draw(parameters);
+        }
+        if (root.currentLayer === "wires") {
+            root.map.drawWiresForegroundLayer(parameters);
+        }
+    }
+
+    root.currentLayer = currentLayer;
+    (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>root.hud.parts!).wiresOverlay.currentAlpha = currentAlpha;
+
+    logger.log("Rendered buffer");
+    return canvas;
+}
+
 export function initHUDScreenshotExporter(mod: Mod) {
-    mod.modInterface.extendClass(HUDScreenshotExporter, () => ({
+    mod.modInterface.extendClass<HUDScreenshotExporter>(HUDScreenshotExporter, () => ({
         startExport() {
             if (!this.root.app.restrictionMgr!.getIsExportingScreenshotsPossible()) {
                 this.root.hud.parts!.dialogs.showFeatureRestrictionInfo(T.demo.features.exportingBase);
@@ -78,34 +250,34 @@ export function initHUDScreenshotExporter(mod: Mod) {
                 if (massSelector.currentSelectionStartWorld) {
                     const worldStart = massSelector.currentSelectionStartWorld;
                     const worldEnd = this.root.camera.screenToWorld(massSelector.currentSelectionEnd!);
-    
+
                     const tileStart = worldStart.toTileSpace();
                     const tileEnd = worldEnd.toTileSpace();
-    
+
                     bounds = Rectangle.fromTwoPoints(tileStart, tileEnd);
                     bounds.w += 1;
                     bounds.h += 1;
                 } else if (massSelector.selectedUids!.size > 0) {
                     const minTile = new Vector(Infinity, Infinity);
                     const maxTile = new Vector(-Infinity, -Infinity);
-    
+
                     const entityUids = Array.from(massSelector.selectedUids!);
                     for (let i = 0; i < entityUids.length; ++i) {
                         const entityBounds = this.root.entityMgr
                             .findByUid(entityUids[i])
                             .components.StaticMapEntity.getTileSpaceBounds();
-    
+
                         minTile.x = Math.min(minTile.x, entityBounds.x);
                         minTile.y = Math.min(minTile.y, entityBounds.y);
-    
+
                         maxTile.x = Math.max(maxTile.x, entityBounds.x + entityBounds.w);
                         maxTile.y = Math.max(maxTile.y, entityBounds.y + entityBounds.h);
                     }
-    
+
                     bounds = Rectangle.fromTwoPoints(minTile, maxTile);
                 }
             }
-    
+
             const qualityInput = new FormElementEnum({
                 id: "screenshotQuality",
                 label: "Quality",
@@ -119,13 +291,13 @@ export function initHUDScreenshotExporter(mod: Mod) {
                 id: "screenshotView",
                 // @TODO: translation (T.dialogs.exportScreenshotWarning.descOverlay)
                 label: "Map view",
-                defaultValue: this.root.camera.getIsMapOverlayActive() ? true : false,
+                defaultValue: this.root.camera.getIsMapOverlayActive(),
             });
             const layerInput = new FormElementCheckbox({
                 id: "screenshotLayer",
                 // @TODO: translation (T.dialogs.exportScreenshotWarning.descLayer)
                 label: "Wires layer",
-                defaultValue: this.root.currentLayer === "wires" ? true : false,
+                defaultValue: this.root.currentLayer === "wires",
             });
             const backgroundInput = new FormElementCheckbox({
                 id: "screenshotBackground",
@@ -165,13 +337,13 @@ export function initHUDScreenshotExporter(mod: Mod) {
                 formElements: [qualityInput, checkboxInputs],
                 buttons: ["cancel:good", "ok:bad"],
             });
-    
+
             dialog.inputReciever.keydown.add(({ keyCode }: { keyCode: number }) => {
                 if (keyCode === KEYMAPPINGS.ingame.exportScreenshot.keyCode) {
                     this.root.hud.parts!.dialogs.closeDialog(dialog);
                 }
             });
-    
+
             this.root.hud.parts!.dialogs.internalShowDialog(dialog);
             dialog.buttonSignals.ok.add(
                 () =>
@@ -187,77 +359,20 @@ export function initHUDScreenshotExporter(mod: Mod) {
             );
         },
 
-        /**
-         * Renders a screenshot of the entire base as closely as possible to the ingame camera
-         */
         doExport(targetResolution: number, overlay: boolean, wiresLayer: boolean, hideBackground: boolean, allowBorder: boolean, tileBounds?: Rectangle) {
-            logger.log("Starting export ...");
-    
-            const boundsSelected = !!tileBounds;
-            if (!tileBounds) {
-                // Find extends
-                const staticEntities = this.root.entityMgr.getAllWithComponent(StaticMapEntityComponent);
-    
-                const minTile = new Vector(0, 0);
-                const maxTile = new Vector(0, 0);
-                for (let i = 0; i < staticEntities.length; ++i) {
-                    const entityBounds = staticEntities[i].components.StaticMapEntity.getTileSpaceBounds();
-                    minTile.x = Math.min(minTile.x, entityBounds.x);
-                    minTile.y = Math.min(minTile.y, entityBounds.y);
-    
-                    maxTile.x = Math.max(maxTile.x, entityBounds.x + entityBounds.w);
-                    maxTile.y = Math.max(maxTile.y, entityBounds.y + entityBounds.h);
-                }
-    
-                minTile.x = Math.floor(minTile.x / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
-                minTile.y = Math.floor(minTile.y / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
-    
-                maxTile.x = Math.ceil(maxTile.x / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
-                maxTile.y = Math.ceil(maxTile.y / globalConfig.mapChunkSize) * globalConfig.mapChunkSize;
-    
-                tileBounds = Rectangle.fromTwoPoints(minTile, maxTile).expandedInAllDirections(
-                    globalConfig.mapChunkSize
-                );
-            }
-    
-            // if the desired pixels per tile is too small, we do not create a border
-            // so that we have more valid values for pixels per tile
-            // we do not create a border for map view since there is no sprite overflow
-            const border =
-                allowBorder &&
-                !overlay &&
-                targetResolution / (Math.max(tileBounds.w, tileBounds.h) + 2 / TARGET_INVERSE_BORDER) >=
-                    3 * TARGET_INVERSE_BORDER;
-    
-            const bounds = border ? tileBounds.expandedInAllDirections(1 / TARGET_INVERSE_BORDER) : tileBounds;
-            logger.log("Bounds:", bounds);
-    
-            const maxDimensions = Math.max(bounds.w, bounds.h);
-    
-            // at least 3 pixels per tile, for bearable quality
-            // at most the resolution of the assets, to not be excessive
-            const clamped = clamp(
-                targetResolution / (maxDimensions + (border ? 2 / 3 : 0)),
-                3,
-                globalConfig.assetsDpi * globalConfig.tileSize
-            );
-    
-            // 1 is a fake value since it behaves the same as a border width of 0
-            const inverseBorder = border ? TARGET_INVERSE_BORDER : 1;
-            const tileSizePixels = overlay
-                ? // we floor to the nearest multiple of the map view tile resolution
-                  Math.floor(clamped / CHUNK_OVERLAY_RES) * CHUNK_OVERLAY_RES || CHUNK_OVERLAY_RES
-                : // we floor to the nearest odd multiple so that the center of each building is rendered
-                  Math.floor((clamped + inverseBorder) / (2 * inverseBorder)) * (2 * inverseBorder) -
-                      inverseBorder || inverseBorder;
-            logger.log("Pixels per tile:", tileSizePixels);
-    
-            if (Math.round(tileSizePixels * maxDimensions) > MAX_CANVAS_DIMS) {
-                logger.error("Maximum canvas size exceeded, aborting");
+            const canvas = takeScreenshot(this.root, {
+                targetResolution,
+                overlay,
+                wiresLayer,
+                hideBackground,
+                allowBorder,
+                tileBounds,
+            });
+            if (canvas === undefined) {
                 this.root.hud.parts!.dialogs.showInfo(
                     // @TODO: translation (T.dialogs.exportScreenshotFail.title)
                     "Too large",
-                    boundsSelected
+                    tileBounds
                         ? // @TODO: translation (T.dialogs.exportScreenshotFail.descSelection)
                           "The region selected is too large to render, sorry! Try selecting a smaller region."
                         : // @TODO: translation (T.dialogs.exportScreenshotFail.desc)
@@ -272,91 +387,9 @@ export function initHUDScreenshotExporter(mod: Mod) {
                 );
                 return;
             }
-    
-            const zoomLevel = tileSizePixels / globalConfig.tileSize;
-            logger.log("Scale:", zoomLevel);
-    
-            // Compute atlas scale
-            const lowQuality = this.root.app.settings!.getAllSettings().lowQualityTextures;
-            const effectiveZoomLevel = (zoomLevel / globalConfig.assetsDpi) * globalConfig.assetsSharpness;
-    
-            let desiredAtlasScale = "0.25";
-            if (effectiveZoomLevel > 0.5 && !lowQuality) {
-                desiredAtlasScale = ORIGINAL_SPRITE_SCALE;
-            } else if (effectiveZoomLevel > 0.35 && !lowQuality) {
-                desiredAtlasScale = "0.5";
-            }
-    
-            logger.log("Allocating buffer, if the factory grew too big it will crash here");
-            const [canvas, context] = makeOffscreenBuffer(
-                Math.round(bounds.w * tileSizePixels),
-                Math.round(bounds.h * tileSizePixels),
-                {
-                    smooth: true,
-                    reusable: false,
-                    label: "export-buffer",
-                }
-            );
-            logger.log("Got buffer, rendering now ...");
-    
-            const visibleRect = bounds.allScaled(globalConfig.tileSize);
-            const parameters = new DrawParameters({
-                context,
-                visibleRect,
-                desiredAtlasScale,
-                root: this.root,
-                zoomLevel: zoomLevel,
-            });
-    
-            context.scale(zoomLevel, zoomLevel);
-            context.translate(-visibleRect.x, -visibleRect.y);
-    
-            // hack but works
-            const currentLayer = this.root.currentLayer;
-            const currentAlpha = (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay.currentAlpha;
-            if (wiresLayer) {
-                this.root.currentLayer = "wires";
-                (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay.currentAlpha = 1;
-            } else {
-                this.root.currentLayer = "regular";
-                (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay.currentAlpha = 0;
-            }
-            this.root.systemMgr.systems.itemAcceptor.updateForScreenshot();
-    
-            // Render all relevant chunks
-            this.root.signals.gameFrameStarted.dispatch();
-            if (overlay) {
-                this.root;
-                if (hideBackground) {
-                    this.root.map.drawVisibleChunks(parameters, MapChunkView.prototype.drawOverlayNoBackground);
-                } else {
-                    this.root.map.drawOverlay(parameters);
-                }
-            } else {
-                if (hideBackground) {
-                    this.root.map.drawVisibleChunks(
-                        parameters,
-                        MapChunkView.prototype.drawBackgroundLayerBeltsOnly
-                    );
-                } else {
-                    this.root.map.drawBackground(parameters);
-                }
-                this.root.systemMgr.systems.belt.drawBeltItems(parameters);
-                this.root.map.drawForeground(parameters);
-                this.root.systemMgr.systems.hub.draw(parameters);
-                if ((<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay) {
-                    (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay.draw(parameters);
-                }
-                if (this.root.currentLayer === "wires") {
-                    this.root.map.drawWiresForegroundLayer(parameters);
-                }
-            }
-    
-            this.root.currentLayer = currentLayer;
-            (<GameHUD["parts"] & { wiresOverlay: HUDWiresOverlay }>this.root.hud.parts!).wiresOverlay.currentAlpha = currentAlpha;
-    
+
             // Offer export
-            logger.log("Rendered buffer, exporting ...");
+            logger.log("Exporting ...");
             const image = canvas.toDataURL("image/png");
             const link = document.createElement("a");
             link.download = "base.png";

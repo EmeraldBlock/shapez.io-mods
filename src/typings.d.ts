@@ -1,7 +1,7 @@
 import type { ModInterface } from "shapez.io/mods/mod_interface";
 declare module "shapez.io/mods/mod_interface" {
     interface ModInterface {
-        extendClass<T extends U, U = T>(classHandle: Class<T>, extender: ({ $super, $old }: { $super: U, $old: T }) => { [propertyName: string]: (this: T, ...args: Array<unknown>) => unknown }): void;
+        extendClass<T extends U, U = T>(classHandle: Class<T>, extender: ({ $super, $old }: { $super: U, $old: T }) => { [propertyName: string]: (this: T, ...args: Array<never>) => unknown }): void;
     }
 }
 
