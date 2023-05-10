@@ -392,7 +392,8 @@ export function initHUDScreenshotExporter(mod: Mod) {
             logger.log("Exporting ...");
             const image = canvas.toDataURL("image/png");
             const link = document.createElement("a");
-            link.download = "base.png";
+            const timestamp = new Date().toISOString().replace('T', '_').replace(/:/g, '-').replace(/\..+/, '');
+            link.download = `base_${timestamp}.png`;
             link.href = image;
             link.click();
             logger.log("Done!");
