@@ -92,7 +92,7 @@ export default async (env) => {
                     type: "asset/source",
                 },
                 {
-                    test: /.webp$/,
+                    test: /.(webp|png)$/,
                     type: "asset/inline",
                 },
             ],

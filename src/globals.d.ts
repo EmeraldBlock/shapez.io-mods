@@ -8,6 +8,11 @@ declare module "*.webp" {
     export default url;
 }
 
+declare module "*.png" {
+    const url: string;
+    export default url;
+}
+
 type Meta = {
     website: string,
     author: string,
